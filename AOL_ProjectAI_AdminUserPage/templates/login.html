@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login – Orbi</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #0033cc, #ff3333);
+      color: white;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .card {
+      background-color: rgba(0, 0, 0, 0.75);
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      color: white;
+    }
+    .btn-primary {
+      background-color: #0055ff;
+      border: none;
+    }
+    .btn-primary:hover {
+      background-color: #003fcc;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 class="text-center mb-4">Login Orbi</h2>
+    <form method="POST">
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" name="username" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Login</button>
+      <div class="text-center mt-3">
+        <a href="/register" class="text-light">Don't have an account?</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

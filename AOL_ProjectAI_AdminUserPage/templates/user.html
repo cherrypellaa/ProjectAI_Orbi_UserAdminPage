@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Orbi Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #0033cc, #ff3333);
+      color: white;
+      min-height: 100vh;
+    }
+    .navbar {
+      background-color: rgba(0, 0, 0, 0.3);
+    }
+    .card {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: none;
+      backdrop-filter: blur(5px);
+      color: white;
+    }
+    .section-title {
+      margin-top: 2rem;
+      font-weight: bold;
+      font-size: 1.5rem;
+    }
+    .setting-label {
+      color: #ddd;
+      font-size: 0.9rem;
+    }
+    #voiceBtn, .btn-warning {
+        padding: 15px 29px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        border-radius: 12px;
+    }
+    #location {
+        font-size: 1.1rem;
+        color: #ffff99;
+    }
+    
+    ul#history-list {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    ul#history-list li::before {
+      content: "📝 ";
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">
+        <img src="{{ url_for('static', filename='orbi.png') }}" alt="Orbi Logo" height="40" /> Orbi Dashboard
+      </a>
+      <div class="ms-auto">
+      <a class="btn btn-outline-light" href="/logout">Logout</a>
+    </div>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+    <div class="row mb-4">
+      <div class="col-md-8">
+        <h2 class="section-title">Live Detection Feed</h2>
+        <div class="card p-3 mb-3">
+          <p><span id="live-text">None</span></p>
+          <p><strong data-en="Time:" data-id="Waktu :">Time:</strong> <span id="live-time">-</span> |
+            <strong class="label-location" data-en="Location:" data-id="Lokasi:">Location:</strong>
+            <span id="live-location">-</span>
+          </p>
+        </div>
+
+        <button id="voiceBtn" class="btn btn-danger">🎤 Speak</button>
+        <button class="btn btn-warning" onclick="getLocation()">📍 Tampilkan Lokasi</button>
+        <p id="voiceResult" class="mt-2"></p>
+        <p id="location" class="mt-1"></p>
+        <div id="map"></div>
+      </div>
+
+      <div class="col-md-4">
+        <h2 class="section-title">Device Settings</h2>
+        <div class="card p-3">
+          <div class="mb-3">
+            <label class="form-label setting-label">Language</label>
+            <select class="form-select" id="languageSelector">
+              <option value="en">English</option>
+              <option value="id">Bahasa Indonesia</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label setting-label">Notification Type</label>
+            <select class="form-select">
+              <option>Sound + Text</option>
+              <option>Sound Only</option>
+              <option>Text Only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-12">
+        <h2 class="section-title">Activity Logs</h2>
+        <div class="card p-3">
+          <ul id="history-list">
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const voiceBtn = document.getElementById("voiceBtn");
+  const voiceResult = document.getElementById("voiceResult");
+  const liveText = document.getElementById("live-text");
+  const liveTime = document.getElementById("live-time");
+  const liveLocation = document.getElementById("live-location");
+  const historyList = document.getElementById("history-list");
+
+  let detecting = false;
+
+  function speak(text) {
+    if ('speechSynthesis' in window) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "id-ID";
+      window.speechSynthesis.speak(utter);
+    } else {
+      console.warn("Browser tidak mendukung text-to-speech.");
+    }
+  }
+
+  function startRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Browser tidak mendukung speech recognition.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+
+    recognition.onstart = () => console.log("🎤 Voice recognition started...");
+    recognition.onerror = event => console.error("Speech recognition error:", event.error);
+
+    recognition.onresult = event => {
+      let transcript = event.results[0][0].transcript.toLowerCase();
+      voiceResult.innerText = `🎙️ Command: "${transcript}"`;
+
+      fetch("/process_voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: transcript })
+      })
+      .then(res => res.json())
+      .then(data => {
+        liveText.innerText = data.result;
+        updateTime();
+        addToHistory(data.result);
+
+        if (transcript.includes("detect object") && !detecting) {
+          detecting = true;
+          setTimeout(detectLoop, 3000);
+        } else if (transcript.includes("stop detecting object")) {
+          detecting = false;
+        }
+
+        if (!detecting) {
+          setTimeout(startRecognition, 2000);
+        }
+      });
+    };
+
+    recognition.start();
+  }
+
+  function detectLoop() {
+    if (!detecting) return;
+
+    fetch("/auto_detect")
+      .then(res => res.json())
+      .then(data => {
+        liveText.innerText = data.result;
+        updateTime();
+        addToHistory(data.result);
+
+        if (detecting) {
+          setTimeout(detectLoop, 5000);
+        }
+      })
+      .catch(err => {
+        console.error("Error in detect loop:", err);
+        detecting = false;
+      });
+  }
+
+  voiceBtn.addEventListener("click", startRecognition);
+
+  function updateTime() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const formatted = `${hours}:${minutes}`;
+    liveTime.innerText = formatted;
+    return formatted;
+  }
+
+  function getLocation() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(showPosition, showError);
+    } else {
+      document.getElementById("location").innerText = "Geolocation tidak didukung.";
+    }
+  }
+
+  function showPosition(position) {
+    const lat = position.coords.latitude.toFixed(6);
+    const lon = position.coords.longitude.toFixed(6);
+    const coordText = `Koordinat Anda: ${lat}, ${lon}`;
+    liveLocation.innerText = coordText;
+
+    const mapUrl = `https://maps.google.com/maps?q=${lat},${lon}&hl=es;&output=embed`;
+   
+    // Reverse Geocoding
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`)
+      .then(res => res.json())
+      .then(data => {
+        const address = data.display_name;
+        const spokenText = `Lokasi Anda adalah: ${address}`;
+        document.getElementById("location").innerText = `Lokasi Anda: ${address}`;
+        liveLocation.innerText = address;
+        speak(spokenText);
+      })
+      .catch(error => {
+        console.error("Gagal mendapatkan alamat detail:", error);
+        const fallbackText = coordText + " (alamat detail tidak tersedia)";
+        document.getElementById("location").innerText = fallbackText;
+        speak("Lokasi didapatkan, tetapi tidak dapat membaca alamat lengkap.");
+      });
+  }
+
+  function showError(error) {
+    let message = "Gagal mengambil lokasi.";
+    if (error.code === 1) message = "Izin lokasi ditolak.";
+    else if (error.code === 2) message = "Lokasi tidak tersedia.";
+    else if (error.code === 3) message = "Timeout saat mengambil lokasi.";
+
+    document.getElementById("location").innerText = message;
+    speak(message);
+  }
+
+  function addToHistory(objectText) {
+    const time = updateTime();
+    const location = liveLocation.innerText || "-";
+    const item = document.createElement("li");
+    item.innerText = `${time} - ${objectText} | Location: ${location}`;
+    historyList.prepend(item);
+
+    fetch("/log_activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: objectText,
+        location: location,
+        time: time
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status !== "success") {
+        console.error("Failed to log activity", data);
+      }
+    })
+    .catch(err => console.error("Error:", err));
+  }
+
+  document.getElementById("languageSelector").addEventListener("change", () => {
+    const lang = document.getElementById("languageSelector").value;
+    document.querySelectorAll("[data-en]").forEach(el => {
+      const text = el.getAttribute(`data-${lang}`);
+      if (text) el.textContent = text;
+    });
+  });
+
+  navigator.geolocation.getCurrentPosition(
+    function(position) {
+      fetch('/log_location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        })
+      });
+    },
+    function(error) {
+      console.error('Lokasi tidak tersedia:', error.message);
+    }
+  );
+</script>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

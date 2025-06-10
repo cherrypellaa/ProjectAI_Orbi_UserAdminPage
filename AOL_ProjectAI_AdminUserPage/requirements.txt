@@ -1,0 +1,10 @@
+Flask
+Flask-SQLAlchemy
+Werkzeug
+pyttsx3
+opencv-python
+ultralytics
+easyocr
+speechrecognition
+pytz
+requests
